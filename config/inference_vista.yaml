@@ -1,0 +1,31 @@
+# vision_model: google/siglip2-base-patch16-naflex
+# vision_model: openai/clip-vit-base-patch16
+# vision_model: microsoft/trocr-base-printed
+# vision_model: deepseek-ai/DeepSeek-OCR
+vision_model: PaddlePaddle/PaddleOCR-VL-1.6
+mt_model_path: facebook/nllb-200-distilled-600M
+latents_dir: OCRMT30k/precomputed_test
+checkpoint: checkpoints/Paddle-Adapter-NLLB-step=32989-val_BLEU=12.9559.ckpt
+#output_file: hypotheses/OCRMT30k/prueba_en.txt
+src_lang: zho_Hans
+#tgt_lang: eng_Latn
+
+adapter_args:
+  visual_hidden_size: 1152
+  text_hidden_size: 1024
+  num_latents: 128
+  latent_dim: 1024
+  num_self_layers: 4
+  cross_heads: 16
+  self_heads: 16
+  dropout: 0.1
+
+seed: 42
+num_workers: 8
+batch_size: 8
+flash_attn: false
+
+use_lora: true
+lora_r: 8
+lora_alpha: 16
+lora_dropout: 0.1

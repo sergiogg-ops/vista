@@ -1,0 +1,40 @@
+data_dir: /home/sgomgon/interlingua_img/OCRMT30k/precomputed_train/texts.json
+val_data_dir: /home/sgomgon/interlingua_img/OCRMT30k/precomputed_val/texts.json
+# -----------------------
+# Gemma
+# model_path: google/gemma-4-E2B-it
+# prompt: You are a professional {source_lang} to {target_lang} translator. Your goal is to accurately convey the meaning and nuances of the original {source_lang} text in the image while adhering to {target_lang} grammar, vocabulary, and cultural sensitivities. Produce only the {target_lang} translation, without any additional explanations or commentary. Please translate the {source_lang} text of the image into {target_lang}.
+# -----------------------
+# DeepSeek
+# model_path: deepseek-ai/DeepSeek-OCR-2
+# prompt: <image>\n<|grounding|>Translate the text in this image into {lang}. 
+# -----------------------
+# Qwen
+model_path: Qwen/Qwen3.5-4B
+prompt: You are a professional {source_lang} to {target_lang} translator. Your goal is to accurately convey the meaning and nuances of the original {source_lang} text in the images provided by the user while adhering to {target_lang} grammar, vocabulary, and cultural sensitivities. Produce only the {target_lang} translation, without any additional explanations or commentary. Please translate the {source_lang} text in the images into {target_lang}.
+# -----------------------
+# PaddleOCR
+# model_path: PaddlePaddle/PaddleOCR-VL-1.6
+# prompt: You are a professional {source_lang} to {target_lang} translator. Your goal is to accurately convey the meaning and nuances of the original {source_lang} text in the image while adhering to {target_lang} grammar, vocabulary, and cultural sensitivities. Produce only the {target_lang} translation, without any additional explanations or commentary. Please translate the {source_lang} text of the image into {target_lang}.
+
+
+batch_size: 1
+accumulate_grad_batches: 128
+num_workers: 8
+lr: 1e-5
+max_epochs: 10
+val_check_interval: 80000
+
+early_stopping: True
+monitor_metric: val_loss
+monitor_mode: min
+patience: 3
+
+attn_implementation: sdpa
+freeze_vision_encoder: True
+use_lora: True
+lora_r: 8
+lora_alpha: 16
+
+wandb_project: WMT-OCRMT30k
+wandb_run_name: Qwen3.5-0.8B

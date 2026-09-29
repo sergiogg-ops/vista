@@ -1,0 +1,10 @@
+# DeepSeek
+model_path: deepseek-ai/DeepSeek-OCR-2
+data_dir: OCRMT30k/precomputed_test
+prompt: <image>\n<|grounding|>Translate the text in this image into {lang}. 
+
+
+batch_size: 1
+num_workers: 8
+
+attn_implementation: sdpa

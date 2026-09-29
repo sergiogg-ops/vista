@@ -1,0 +1,9 @@
+model_path: PaddlePaddle/PaddleOCR-VL-1.6
+data_dir: LSVT/precomputed_test
+prompt: You are a professional {source_lang} to {target_lang} translator. Your goal is to accurately convey the meaning and nuances of the original {source_lang} text in the image while adhering to {target_lang} grammar, vocabulary, and cultural sensitivities. Produce only the {target_lang} translation, without any additional explanations or commentary. Please translate the {source_lang} text of the image into {target_lang}.
+resume_from_checkpoint: checkpoints/Paddleocr-vl-epoch=05-val_loss=3.6746.ckpt
+
+batch_size: 16
+num_workers: 8
+
+attn_implementation: sdpa

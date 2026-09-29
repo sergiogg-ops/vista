@@ -1,0 +1,14 @@
+mt_path: facebook/nllb-200-distilled-600M
+
+index_file: OCRMT30k/before_tok_bpe/image_test.txt
+src_text_file: OCRMT30k/before_tok_bpe/ocr_zh_test.txt
+tgt_text_files: [OCRMT30k/before_tok_bpe/ocr_en_test.txt, OCRMT30k/before_tok_bpe/ocr_ar_test.txt, OCRMT30k/before_tok_bpe/ocr_be_test.txt, OCRMT30k/before_tok_bpe/ocr_es_test.txt, OCRMT30k/before_tok_bpe/ocr_fr_test.txt,OCRMT30k/before_tok_bpe/ocr_hi_test.txt, OCRMT30k/before_tok_bpe/ocr_in_test.txt, OCRMT30k/before_tok_bpe/ocr_ja_test.txt, OCRMT30k/before_tok_bpe/ocr_ru_test.txt, OCRMT30k/before_tok_bpe/ocr_ur_test.txt]
+target_langs: [eng_Latn, arb_Arab, ben_Beng, spa_Latn, fra_Latn, hin_Deva, ind_Latn, jpn_Jpan, rus_Cyrl, urd_Arab]
+img_path: OCRMT30k/test_images
+metadata_path: OCRMT30k/raw_data/
+
+num_samples: -1
+add_synthetic: False
+output_dir: OCRMT30k/precomputed_test
+batch_size: 32
+seed: 42

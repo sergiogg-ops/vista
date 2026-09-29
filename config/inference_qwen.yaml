@@ -1,0 +1,10 @@
+# Qwen
+model_path: Qwen/Qwen3.5-4B
+data_dir: OCRMT30k/precomputed_test
+prompt: You are a professional {source_lang} to {target_lang} translator. Your goal is to accurately convey the meaning and nuances of the original {source_lang} text in the images provided by the user while adhering to {target_lang} grammar, vocabulary, and cultural sensitivities. Produce only the {target_lang} translation, without any additional explanations or commentary. Please translate the {source_lang} text in the images into {target_lang}.
+
+
+batch_size: 1
+num_workers: 8
+
+attn_implementation: sdpa

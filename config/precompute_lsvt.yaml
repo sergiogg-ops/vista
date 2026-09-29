@@ -1,0 +1,13 @@
+mt_path: facebook/nllb-200-distilled-600M
+
+src_text_file: LSVT/test_zh.txt
+tgt_text_files: [LSVT/test_ar_nllb.txt, LSVT/test_be_nllb.txt, LSVT/test_es_nllb.txt, LSVT/test_en_nllb.txt, LSVT/test_fr_nllb.txt, LSVT/test_hi_nllb.txt, LSVT/test_in_nllb.txt, LSVT/test_ja_nllb.txt, LSVT/test_ru_nllb.txt, LSVT/test_ur_nllb.txt]
+target_langs: [eng_Latn, arb_Arab, ben_Beng, spa_Latn, fra_Latn, hin_Deva, ind_Latn, jpn_Jpan, rus_Cyrl, urd_Arab]
+img_path: LSVT/test_full_images
+metadata_path: LSVT/test_zh.json
+
+num_samples: 100
+add_synthetic: False
+output_dir: LSVT/precomputed_test
+batch_size: 32
+seed: 42

@@ -1,3 +1,4 @@
+#paddle_path: PaddlePaddle/PaddleOCR-VL-1.6
 mt_path: facebook/nllb-200-distilled-600M
 
 src_text_file: LSVT/test_zh.txt

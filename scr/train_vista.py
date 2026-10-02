@@ -13,7 +13,7 @@ from transformers import (
     NllbTokenizer, 
     AutoModelForImageTextToText)
 from peft import LoraConfig, get_peft_model
-import scr.vista as mt
+import vista as mt
 from dotenv import load_dotenv
 
 load_dotenv()

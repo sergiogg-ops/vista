@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+OCRMT30k/*
+LSVT/*
+hypotheses/*
+checkpoints/*
+*.out

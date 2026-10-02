@@ -1,17 +1,13 @@
-# vision_model: google/siglip2-base-patch16-naflex
-# vision_model: openai/clip-vit-base-patch16
-# vision_model: microsoft/trocr-base-printed
-# vision_model: deepseek-ai/DeepSeek-OCR
 vision_model: PaddlePaddle/PaddleOCR-VL-1.6
 mt_model_path: facebook/nllb-200-distilled-600M
-train_latents_dir: /home/sgomgon/interlingua_img/OCRMT30k/precomputed_train
-valid_latents_dir: /home/sgomgon/interlingua_img/OCRMT30k/precomputed_val
+train_latents_dir: /home/sgomgon/vista/OCRMT30k/precomputed_train
+valid_latents_dir: /home/sgomgon/vista/OCRMT30k/precomputed_val
 src_lang: zho_Hans
 tgt_langs: [eng_Latn, arb_Arab, ben_Beng, spa_Latn, fra_Latn, hin_Deva, ind_Latn, jpn_Jpan, rus_Cyrl, urd_Arab]
 
 adapter_args:
-  visual_hidden_size: 1152
-  text_hidden_size: 1024
+  input_hidden_size: 1152
+  output_hidden_size: 1024
   num_latents: 128
   latent_dim: 1024
   num_self_layers: 4

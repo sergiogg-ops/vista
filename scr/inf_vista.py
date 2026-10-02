@@ -12,7 +12,7 @@ from transformers import (
     NllbTokenizer, 
     AutoModelForImageTextToText)
 from peft import LoraConfig, get_peft_model
-import scr.vista as mt
+import vista as mt
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -129,32 +129,6 @@ def main():
                                                         token=HF_TOKEN, 
                                                         use_safetensors=True,
                                                         **kwargs)
-    # SIGLIP                                                        
-    # vision_model = AutoModel.from_pretrained(args.vision_model, 
-    #                                             token=HF_TOKEN, 
-    #                                             use_safetensors=True,
-    #                                             **kwargs).vision_model
-    # CLIP                                                     
-    # vision_model = AutoModelForMultimodalLM.from_pretrained(args.vision_model, 
-    #                                             token=HF_TOKEN, 
-    #                                             use_safetensors=True,
-    #                                             **kwargs).encoder
-    # SAM                                                    
-    # vision_model = AutoModel.from_pretrained(args.vision_model, 
-    #                                             token=HF_TOKEN, 
-    #                                             use_safetensors=True,
-    #                                             trust_remote_code=True).model.sam_model
-    # DEEPSEEK                                                  
-    # deepseek = AutoModel.from_pretrained(args.vision_model, 
-    #                                             token=HF_TOKEN, 
-    #                                             use_safetensors=True,
-    #                                             trust_remote_code=True).model
-    # vision_model = mt.VisionEncoder(
-    #     sam_model=deepseek.sam_model,
-    #     clip_model=deepseek.vision_model,
-    #     projector=deepseek.projector,
-    # )
-    # Paddle OCR
     vision_model = AutoModelForImageTextToText.from_pretrained(args.vision_model, 
                                                   token=HF_TOKEN, 
                                                   use_safetensors=True).model.visual.vision_model
@@ -163,9 +137,6 @@ def main():
                 r=args.lora_r,
                 lora_alpha=args.lora_alpha,
                 lora_dropout=args.lora_dropout,
-                #target_modules=["k_proj", "q_proj", "v_proj", "fc1", "fc2"] # SigLIP
-                #target_modules=["query", "key", "value", "dense"] # CLIP
-                #target_modules=["net2", "net3", "fc1", "fc2", "projector.layers"] # DeepSeek
                 target_modules=["k_proj", "q_proj", "v_proj", "out_proj", "fc1", "fc2"]
             )
             vision_model = get_peft_model(vision_model, lora_config)

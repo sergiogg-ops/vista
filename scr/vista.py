@@ -7,13 +7,10 @@ from dotenv import load_dotenv
 import os
 import random
 import pytorch_lightning as pl
-from sklearn.metrics import f1_score
-from transformers import AutoModelForSeq2SeqLM, NllbTokenizer
 from torch.nn.utils.rnn import pad_sequence
 from sacrebleu import corpus_bleu, corpus_ter
 from transformers.modeling_outputs import BaseModelOutput
 from transformers.models.encoder_decoder.modeling_encoder_decoder import shift_tokens_right
-from transformers.models.gemma3.modeling_gemma3 import Gemma3RMSNorm
 
 load_dotenv()
 HF_TOKEN = os.getenv("HF_TOKEN")
@@ -375,8 +372,8 @@ class PerceiverResampler(nn.Module):
 
     def __init__(
         self,
-        visual_hidden_size: int,
-        text_hidden_size: int,
+        input_hidden_size: int,
+        output_hidden_size: int,
         num_latents: int = 128,
         latent_dim: int = 512,
         num_self_layers: int = 2,
@@ -392,12 +389,12 @@ class PerceiverResampler(nn.Module):
 
         # Learned latent queries
         self.latents = nn.Parameter(torch.randn(1, num_latents, latent_dim) * 0.02)
-        self.positions = nn.Parameter(torch.randn(1,num_latents, text_hidden_size))
+        self.positions = nn.Parameter(torch.randn(1,num_latents, output_hidden_size))
         self.rope = Rotary2D(latent_dim, max_height=16, max_width=16)
 
         # Project vision tokens to key/value dimension if needed
-        if visual_hidden_size != latent_dim:
-            self.kv_proj = nn.Linear(visual_hidden_size, latent_dim)
+        if input_hidden_size != latent_dim:
+            self.kv_proj = nn.Linear(input_hidden_size, latent_dim)
         else:
             self.kv_proj = nn.Identity()
 
@@ -436,8 +433,8 @@ class PerceiverResampler(nn.Module):
 
         # Output projection into text embedding dimension
         self.to_text = nn.Sequential(
-            nn.Linear(latent_dim, text_hidden_size),
-            nn.RMSNorm(text_hidden_size)
+            nn.Linear(latent_dim, output_hidden_size),
+            nn.RMSNorm(output_hidden_size)
         )
 
     def forward(self, vision_outputs: torch.Tensor, attn_mask: torch.Tensor = None, grid_hw: torch.Tensor = None):
@@ -448,7 +445,7 @@ class PerceiverResampler(nn.Module):
             attn_mask: (B, N) with 1 for valid tokens, 0 for padding
 
         Returns:
-            (B, M, text_hidden_size)
+            (B, M, output_hidden_size)
         """
         bsz, seq_len, _ = vision_outputs.shape
         attn_mask = attn_mask if attn_mask is not None else torch.ones(bsz, seq_len, device=vision_outputs.device, dtype=torch.bool)
@@ -612,7 +609,7 @@ class Vista(nn.Module):
     
             return nn.functional.mse_loss(hyp_stats, tgt_stats)
 
-    def foward(
+    def forward(
             self,
             source,
             attn_mask,
@@ -665,7 +662,7 @@ class Translator(pl.LightningModule):
         tgt_id = {lang_id: self.tokenizer.convert_tokens_to_ids(lang_id) for lang_id in tgt_langs}
         self.register_buffer('src_lang_tok', self.mt_model.model.shared.weight[src_id].detach().clone().unsqueeze(0).unsqueeze(0))
         self.tgt_lang_id = tgt_id
-        self.vista = PerceiverResampler(
+        self.vista = Vista(
             use_flash_attn = flash_attn,
             padding_val = padding_value,
             ctc_vocab = 256204,
@@ -695,7 +692,7 @@ class Translator(pl.LightningModule):
         """
         vision_outputs = self.vision_encoder(
             pixel_values=pixel_values,
-            image_grid_thw=image_grid_thw,
+            grid_thw=image_grid_thw,
             cu_seqlens=cu_seqlens
         ).last_hidden_state
 
@@ -728,7 +725,7 @@ class Translator(pl.LightningModule):
     def inference(self, pixel_values, image_grid_thw, cu_seqlens, langs):
         vision_outputs = self.vision_encoder(
             pixel_values=pixel_values,
-            image_grid_thw=image_grid_thw,
+            grid_thw=image_grid_thw,
             cu_seqlens=cu_seqlens
         ).last_hidden_state
 
@@ -781,8 +778,6 @@ class Translator(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         batch_size = batch['pixel_values'].size(0)
-        with torch.no_grad():
-            encoder_outputs = self.mt_model.model.encoder(input_ids = batch['src_txt']).last_hidden_state
         outputs = self.inference(
             batch['pixel_values'],
             batch['image_grid_thw'],
@@ -846,7 +841,6 @@ class Translator(pl.LightningModule):
         max_steps = self.hparams.max_steps
         optimizer = torch.optim.AdamW([
             {"params": self.vista.parameters(), "lr": adapter_lr},
-            {"params": self.ocr_head.parameters(), "lr": adapter_lr},
             {"params": self.vision_encoder.parameters(), "lr": encoder_lr},
             {"params": self.mt_model.model.decoder.parameters(), "lr": decoder_lr},
         ])

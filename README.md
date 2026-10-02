@@ -41,6 +41,12 @@ cd vista
 
 conda create -n vista python=3.14
 conda activate vista
+
+# 1. Install PyTorch for YOUR GPU / CUDA driver.
+#    Pick the command at https://pytorch.org/get-started/locally/, e.g.:
+pip install torch
+
+# 2. Install the remaining dependencies
 pip install -r requirements.txt
 ```
 

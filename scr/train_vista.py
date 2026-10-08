@@ -147,6 +147,7 @@ def main():
                           max_steps=args.max_steps,
                           step_milestones=args.unfreeze_milestones,
                           mt_loss=args.mt_weight,
+                          align_loss=args.align_weight,
                           ctc_loss=args.ctc_weight,
                           padding_value=padding_tok,
                           flash_attn=args.flash_attn,

@@ -1,7 +1,7 @@
 vision_model: PaddlePaddle/PaddleOCR-VL-1.6
 mt_model_path: facebook/nllb-200-distilled-600M
-train_latents_dir: /home/sgomgon/vista/OCRMT30k/precomputed_train
-valid_latents_dir: /home/sgomgon/vista/OCRMT30k/precomputed_val
+train_latents_dir: /lustre/scratch/sgomgon@upvnet.upv.es/OCRMT30k/precomputed_train
+valid_latents_dir: /lustre/scratch/sgomgon@upvnet.upv.es/OCRMT30k/precomputed_val
 src_lang: zho_Hans
 tgt_langs: [eng_Latn, arb_Arab, ben_Beng, spa_Latn, fra_Latn, hin_Deva, ind_Latn, jpn_Jpan, rus_Cyrl, urd_Arab]
 
@@ -19,22 +19,22 @@ monitor_metric: val_loss
 monitor_mode: min
 
 mt_weight: 1.0
-ctc_weight: 0.05
+ctc_weight: 0.0 #0.05
 align_weight: 1.0
 distilling: False
 
-save: checkpoints
+save: /lustre/scratch/sgomgon@upvnet.upv.es/checkpoints
 project: WMT-OCRMT30k
-name: Paddle-Adapter-NLLB
+name: ablation_ctc
 seed: 42
 
-num_workers: 8
-train_batch_size: 4
+num_workers: 12
+train_batch_size: 16
 val_batch_size: 16
-accumulate_grad: 32
+accumulate_grad: 4
 max_steps: 100000
-val_check_interval: 4000
-unfreeze_milestones: [1875, 3750, 5625]
+val_check_interval: 2000
+unfreeze_milestones: [470, 940, 1400]
 
 ini_lr: 1e-4
 lr_vision: 1e-4

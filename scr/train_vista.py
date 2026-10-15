@@ -18,6 +18,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 HF_TOKEN = os.getenv("HF_TOKEN")
+torch.backends.cuda.enable_cudnn_sdp(False)   # available in PyTorch >= 2.5
 torch.cuda.init()
 torch.cuda.set_device(0)
 _ = torch.zeros(1).cuda()
@@ -147,6 +148,7 @@ def main():
                           max_steps=args.max_steps,
                           step_milestones=args.unfreeze_milestones,
                           mt_loss=args.mt_weight,
+                          align_loss=args.align_weight,
                           ctc_loss=args.ctc_weight,
                           padding_value=padding_tok,
                           flash_attn=args.flash_attn,

@@ -112,13 +112,14 @@ class QwenOCRTranslationDataset(Dataset):
                 add_generation_prompt=True,
                 tokenize=False,
                 return_dict=True,
+                enable_thinking=False,
             )
             prompt_texts.append(p_text)
             
             # Text layout for training loops
             full_msg = user_msg + [{"role": "assistant", "content": [{"type": "text", "text": s["txt_tgt"]}]}]
             f_text = self.processor.apply_chat_template(
-                full_msg, add_generation_prompt=False, tokenize=False
+                full_msg, add_generation_prompt=False, tokenize=False, enable_thinking=False,
             )
             full_texts.append(f_text)
 

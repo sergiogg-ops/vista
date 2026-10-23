@@ -43,7 +43,7 @@ def load_texts_json(path: str, lang: str) -> list[dict]:
 def merge(*records):
     keys = sum([list(r.keys()) for r in records], [])
     merged = {}
-    for idx in keys():
+    for idx in keys:
         merged[idx] = {}
         for r in records:
             merged[idx].update(r[idx])
@@ -64,7 +64,7 @@ class QwenOCRTranslationDataset(Dataset):
             lang = os.path.basename(file).split('.')[0].removeprefix('text_')
             data = load_texts_json(file, lang)
             records.append(data)
-        self.records = merge(records)
+        self.records = merge(*records)
         self.targets = list(targets.keys())
         self.processor = processor
         self.prompt = prompt

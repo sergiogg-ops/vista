@@ -33,26 +33,41 @@ CODE2LANG = {
 }
 
 
-def load_texts_json(path: str) -> list[dict]:
+def load_texts_json(path: str, lang: str) -> list[dict]:
     with open(path, "r", encoding="utf-8") as f:
         raw = f.read()
     raw = re.sub(r",\s*\]\s*$", "]", raw.strip())
-    return json.loads(raw)
+    record = {sample['idx']: {lang: sample['text']} for sample in json.loads(raw)}
+    return record
 
+def merge(*records):
+    keys = sum([list(r.keys()) for r in records], [])
+    merged = {}
+    for idx in keys():
+        merged[idx] = {}
+        for r in records:
+            merged[idx].update(r[idx])
+    return merged
 
 class QwenOCRTranslationDataset(Dataset):
     def __init__(
         self, 
-        index_file: str, 
+        index_files, 
         processor, 
         prompt: str = "Translate the {source_lang} text in this image into {target_lang}:", 
     ):
-        self.records = load_texts_json(index_file)
+        records = []
+        targets = {os.path.basename(file).split('.')[0].removeprefix('text_'): file for file in index_files}
+        if 'zho_Hans' in targets:
+            del targets['zho_Hans']
+        for lang, file in targets.items():
+            lang = os.path.basename(file).split('.')[0].removeprefix('text_')
+            data = load_texts_json(file, lang)
+            records.append(data)
+        self.records = merge(records)
+        self.targets = list(targets.keys())
         self.processor = processor
         self.prompt = prompt
-        self.targets = list(self.records[0].keys())
-        self.targets.remove('zho_Hans')
-        self.targets.remove('id')
 
     def __len__(self) -> int:
         return len(self.records)

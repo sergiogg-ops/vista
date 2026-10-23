@@ -373,8 +373,8 @@ def parse_args():
     parser = ArgumentParser(description="Fine-tune GemmaOCR-VL-1.6 for image -> English translation.")
     parser.add_argument("--config", type=str, help="Path to YAML configuration file.", is_config_file=True)
 
-    parser.add_argument("--data_dir", type=str, required=True, help="Output dir of precompute_Gemma.py (contains texts.json + *.jpg).")
-    parser.add_argument("--val_data_dir", type=str, default=None, help="Optional separate precomputed validation dir (same format as --data_dir). If omitted, a random split of --data_dir is used instead.")
+    parser.add_argument("--data_dir", type=str, nargs='+', required=True, help="Output dir of precompute_Gemma.py (contains texts.json + *.jpg).")
+    parser.add_argument("--val_data_dir", type=str, nargs='+', default=None, help="Optional separate precomputed validation dir (same format as --data_dir). If omitted, a random split of --data_dir is used instead.")
     parser.add_argument("--model_path", type=str, default="GemmaGemma/GemmaOCR-VL-1.6", help="HF repo id or local path to GemmaOCR-VL-1.6.")
     parser.add_argument("--hf_token", type=str, default=os.getenv("HF_TOKEN"), help="HF auth token, if the model is private.")
 

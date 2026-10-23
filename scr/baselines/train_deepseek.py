@@ -83,11 +83,15 @@ CODE2LANG = {
 }
 
 
-def load_texts_json(path: str) -> list[dict]:
+def load_texts_json(path: str, lang: str) -> list[dict]:
     with open(path, "r", encoding="utf-8") as f:
         raw = f.read()
     raw = re.sub(r",\s*\]\s*$", "]", raw.strip())
-    return json.loads(raw)
+    record = json.loads(raw)
+    for sample in record:
+        sample['lang'] = lang
+        sample['idx'] = os.path.join(os.path.dirname(path), sample['idx'] + '.jpg')
+    return record
 
 
 # --------------------------------------------------------------------------------------
@@ -278,7 +282,7 @@ def preprocess_prompt_with_image(
 class DeepSeekOCRTranslationDataset(Dataset):
     def __init__(
         self,
-        index_file: str,
+        index_files: str,
         tokenizer,
         prompt: str = "<image>\n<|grounding|>Translate the text in this image into {lang}. ",
         base_size: int = 1024,
@@ -291,12 +295,13 @@ class DeepSeekOCRTranslationDataset(Dataset):
         crop_tile_size: int = 768,
         max_length: int = 512,
     ):
-        self.records = load_texts_json(index_file)
+        targets = {os.path.basename(file).split('.')[0].removeprefix('texts_'): file for file in index_files}
+        if 'zho_Hans' in targets:
+            del targets['zho_Hans']
+        self.targets = list(targets.keys())
+        self.records = sum([load_texts_json(targets[lang], lang) for lang in self.targets],[])
         self.tokenizer = tokenizer
         self.prompt = prompt
-        self.targets = list(self.records[0].keys())
-        self.targets.remove('zho_Hans')
-        self.targets.remove('id')
         self.base_size = base_size
         self.image_size = image_size
         self.crop_mode = crop_mode
@@ -313,7 +318,7 @@ class DeepSeekOCRTranslationDataset(Dataset):
     def __getitem__(self, idx: int) -> dict:
         record = self.records[idx]
         image = Image.open(record["id"]).convert("RGB")
-        lang = random.choice(self.targets)
+        lang = record['lang']
 
         return {
             "image": image,

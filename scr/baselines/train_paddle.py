@@ -35,26 +35,31 @@ CODE2LANG = {
 MAX_PIXELS = max_pixels = 1280 * 28 * 28 # from https://huggingface.co/PaddlePaddle/PaddleOCR-VL-1.6
 
 
-def load_texts_json(path: str) -> list[dict]:
+def load_texts_json(path: str, lang: str) -> list[dict]:
     with open(path, "r", encoding="utf-8") as f:
         raw = f.read()
     raw = re.sub(r",\s*\]\s*$", "]", raw.strip())
-    return json.loads(raw)
+    record = json.loads(raw)
+    for sample in record:
+        sample['lang'] = lang
+        sample['idx'] = os.path.join(os.path.dirname(path), sample['idx'] + '.jpg')
+    return record
 
 
 class PaddleOCRTranslationDataset(Dataset):
     def __init__(
         self, 
-        index_file: str, 
+        index_files, 
         processor, 
         prompt: str = "Translate the {source_lang} text in this image into {target_lang}:", 
     ):
-        self.records = load_texts_json(index_file)
+        targets = {os.path.basename(file).split('.')[0].removeprefix('texts_'): file for file in index_files}
+        if 'zho_Hans' in targets:
+            del targets['zho_Hans']
+        self.targets = list(targets.keys())
+        self.records = sum([load_texts_json(targets[lang], lang) for lang in self.targets],[])
         self.processor = processor
         self.prompt = prompt
-        self.targets = list(self.records[0].keys())
-        self.targets.remove('zho_Hans')
-        self.targets.remove('id')
 
     def __len__(self) -> int:
         return len(self.records)
@@ -62,13 +67,12 @@ class PaddleOCRTranslationDataset(Dataset):
     def __getitem__(self, idx: int) -> dict:
         # Pass only raw data; let the collator handle batch-level processing
         record = self.records[idx]
-        image = Image.open(record["id"]).convert("RGB")
-        lang = random.choice(self.targets) 
+        image = Image.open(record["idx"]).convert("RGB")
         
         return {
             "image": image,
-            "lang": lang,
-            "txt_tgt": record[lang]
+            "lang": record['lang'],
+            "txt_tgt": record['text']
         }
     
     def _collate_fn(self, batch_samples):

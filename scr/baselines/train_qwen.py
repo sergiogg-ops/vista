@@ -43,15 +43,6 @@ def load_texts_json(path: str, lang: str) -> list[dict]:
         sample['idx'] = os.path.join(os.path.dirname(path), sample['idx'] + '.jpg')
     return record
 
-def merge(*records):
-    keys = sum([list(r.keys()) for r in records], [])
-    merged = {}
-    for idx in keys:
-        merged[idx] = {}
-        for r in records:
-            merged[idx].update(r[idx])
-    return merged
-
 class QwenOCRTranslationDataset(Dataset):
     def __init__(
         self, 

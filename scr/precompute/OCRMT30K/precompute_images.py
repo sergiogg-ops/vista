@@ -2,7 +2,7 @@ import torch
 import numpy as np
 from safetensors.torch import save_file
 from transformers import AutoModel, AutoImageProcessor
-from PIL import Image
+from PIL import Image, ImageDraw
 from configargparse import ArgumentParser
 from shutil import rmtree
 from tqdm import tqdm
@@ -11,7 +11,7 @@ import os
 import cv2
 import re
 import unicodedata
-import json
+from xml.sax.saxutils import escape
 
 def load_image(path: str) -> Image.Image:
     """
@@ -24,7 +24,7 @@ def load_image(path: str) -> Image.Image:
     """
     return Image.open(path).convert("RGB")
 
-def crop_bounding_box(image: Image.Image, polygon: list, margin: int = 0) -> Image.Image:
+def _polygon_points(polygon: list, margin: int = 0) -> list[tuple[float, float]]:
     points = np.array(polygon, dtype=np.float32)
 
     if points.ndim == 1:
@@ -39,33 +39,43 @@ def crop_bounding_box(image: Image.Image, polygon: list, margin: int = 0) -> Ima
         norms = np.where(norms == 0, 1, norms)
         points = points + (directions / norms) * margin
 
-    # Compute the axis-aligned bounding box from all polygon points
-    x_min, y_min = points.min(axis=0)
-    x_max, y_max = points.max(axis=0)
+    return [tuple(p) for p in points.tolist()]
 
-    x_min, y_min = int(np.floor(x_min)), int(np.floor(y_min))
-    x_max, y_max = int(np.ceil(x_max)),  int(np.ceil(y_max))
+def mask_other_bounding_boxes(
+        image: Image.Image,
+        target_polygon: list,
+        other_polygons: list[list],
+        fill: tuple[int, int, int] = (0, 0, 0),
+        margin: int = 0,
+) -> Image.Image:
+    """
+    Paint every polygon in ``other_polygons`` with ``fill`` while keeping the
+    region of ``target_polygon`` untouched (even where boxes overlap).
+    """
+    masked = image.copy()
+    draw = ImageDraw.Draw(masked)
+    for polygon in other_polygons:
+        draw.polygon(_polygon_points(polygon, margin), fill=fill)
 
-    # Clamp to image bounds
-    img_w, img_h = image.size
-    x_min = max(0, x_min)
-    y_min = max(0, y_min)
-    x_max = min(img_w, x_max)
-    y_max = min(img_h, y_max)
+    # Restore the target region in case another box overlapped it
+    target_mask = Image.new("L", image.size, 0)
+    ImageDraw.Draw(target_mask).polygon(_polygon_points(target_polygon), fill=255)
+    masked.paste(image, (0, 0), target_mask)
 
-    return image.crop((x_min, y_min, x_max, y_max))
+    return masked
 
 def compute_samples(
         src_image: Image.Image,
         src_text: list[str],
         tgt_text: list[str],
-        bbox: list[list],
+        bbox: list,
+        other_bboxes: list[list],
         processor: AutoImageProcessor,
         tokenizer: NllbTokenizer,
         mt_model: AutoModel = None,
         device: str = "cuda",
 ) -> list:
-    image = crop_bounding_box(src_image, bbox)
+    image = mask_other_bounding_boxes(src_image, bbox, other_bboxes)
     processed = processor(images=image, return_tensors='pt')
     processed = {k: v.to(device) for k, v in processed.items()}
 
@@ -112,18 +122,24 @@ def parse_args():
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility.")
     return parser.parse_args()
 
+NUMBER_RE = re.compile(r'-?\d+(?:\.\d+)?')
+
 def parse_metadata(filename: str) -> tuple[list[list[int]], list[str]]:
     bboxes, texts = [], []
     with open(filename, "r") as f:
         for line in f:
             line = line.rstrip("\n")
-            # Split on commas, but only consume leading numeric tokens
-            # Everything after the last number is the text label
-            match = re.match(r'^((?:-?\d+(?:\.\d+)?,)+)(.+)$', line)
-            # if not match:
-            #     continue
-            bboxes.append([float(n) for n in match.group(1).rstrip(",").split(",")])
-            texts.append(match.group(2).strip())
+            parts = line.split(",")
+            # Count the leading numeric tokens (the last part is always text)
+            n_nums = 0
+            while n_nums < len(parts) - 1 and NUMBER_RE.fullmatch(parts[n_nums]):
+                n_nums += 1
+            # Labels may start with numbers too (e.g. "203,900元"), so only
+            # keep a multiple of 4 values (pairs of points, quads or larger
+            # polygons) as coordinates; the leftover numbers belong to the text
+            n_coords = n_nums - n_nums % 4
+            bboxes.append([float(n) for n in parts[:n_coords]])
+            texts.append(",".join(parts[n_coords:]).strip())
     return bboxes, texts
 
 def normalize(s: str) -> str:
@@ -132,12 +148,39 @@ def normalize(s: str) -> str:
     return s.strip()
 
 def get_bbox(filename, text):
+    """
+    Return ``(target_bbox, other_bboxes)`` where ``target_bbox`` is the first
+    box whose label matches ``text`` and ``other_bboxes`` are all the rest.
+    Returns ``(None, None)`` if no box matches.
+    """
     bboxes, texts = parse_metadata(filename)
     text = normalize(text)
-    for bbox, txt in zip(bboxes, texts):
+    for i, txt in enumerate(texts):
         if normalize(txt) == text:
-            return bbox
-    return None
+            return bboxes[i], bboxes[:i] + bboxes[i + 1:]
+    return None, None
+
+SRC_LANG = "zho_Hans"
+
+def write_sgm(path: str, entries: list[dict], lang: str, src_lang: str, setid: str) -> None:
+    """
+    Write ``entries`` (dicts with ``idx`` and ``text``) as a WMT/NIST-style SGML
+    file wrapped in a ``<set>`` element. All entries are segments of a single
+    ``<doc>``, and each segment's ``id`` is the entry's ``idx`` (the saved
+    image name).
+    """
+    q = lambda s: escape(s, {'"': "&quot;"})
+    attrs = f'setid="{q(setid)}" srclang="{q(src_lang)}"'
+    if lang != src_lang:
+        attrs += f' trglang="{q(lang)}"'
+
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(f"<set {attrs}>\n")
+        f.write(f'<doc docid="{q(setid)}" origlang="{q(src_lang)}">\n')
+        for entry in entries:
+            f.write(f'<seg id="{q(entry["idx"])}">{escape(entry["text"])}</seg>\n')
+        f.write("</doc>\n")
+        f.write("</set>\n")
 
 def create_name(ini_name):
     path, ext = os.path.splitext(ini_name)
@@ -171,33 +214,63 @@ def main():
         tgt_texts = None
 
     num_samples = min(args.num_samples, len(identifiers)) if args.num_samples > 0 else len(identifiers)
-    lang_entries = {lang: [] for lang in args.target_langs + ["zho_Hans"]}
+    lang_entries = {lang: [] for lang in args.target_langs + [SRC_LANG]}
+    image_entries = []
+    bbox_entries = []
 
     failures = 0
     for idx, name in tqdm(enumerate(identifiers[:num_samples]), desc="Processing batches", total=num_samples):
         identifier = os.path.splitext(name)[0]
         metadata_file = os.path.join(args.metadata_path, f"{identifier}.txt")
         img = load_image(os.path.join(args.img_path,identifier + '.jpg'))
-        bbox = get_bbox(metadata_file, src_texts[idx])
+        bbox, other_bboxes = get_bbox(metadata_file, src_texts[idx])
         if bbox is None:
             failures += 1
             continue
         source_txt = src_texts[idx].strip()
         target_txt = {lang: texts[idx].strip() for lang, texts in zip(args.target_langs, tgt_texts)} if tgt_texts else None
-        image = crop_bounding_box(img, bbox)
+        image = mask_other_bounding_boxes(img, bbox, other_bboxes)
         # Save each sample without batch dimension
         
         namesave = create_name(os.path.join(args.output_dir, f"{identifier}.jpg"))
         image.save(namesave)
 
-        target_txt["zho_Hans"] = source_txt
+        sample_id = os.path.basename(namesave).split('.')[0]
+        target_txt[SRC_LANG] = source_txt
         for lang, text in target_txt.items():
-            lang_entries[lang].append({"idx": os.path.basename(namesave).split('.')[0], "text": text})
+            lang_entries[lang].append({"idx": sample_id, "text": text})
+        image_entries.append({"idx": sample_id, "text": namesave})
+        # Same comma-separated layout as the raw metadata ("x0,y0,x1,y1,...")
+        bbox_entries.append({
+            "idx": sample_id,
+            "text": ",".join(str(int(v)) if float(v).is_integer() else str(v) for v in bbox),
+        })
 
+    setid = os.path.basename(os.path.normpath(args.output_dir))
     for lang, entries in lang_entries.items():
-            with open(os.path.join(args.output_dir, f'texts_{lang}.json'), 'w') as file:
-                json.dump(entries, file, ensure_ascii=False, indent=2)
-                file.write("\n")
+        write_sgm(
+            os.path.join(args.output_dir, f'texts_{lang}.sgm'),
+            entries,
+            lang=lang,
+            src_lang=SRC_LANG,
+            setid=setid,
+        )
+    # Mapping from segment id to the path of its (masked) image
+    write_sgm(
+        os.path.join(args.output_dir, 'images.sgm'),
+        image_entries,
+        lang=SRC_LANG,
+        src_lang=SRC_LANG,
+        setid=setid,
+    )
+    # Mapping from segment id to the bounding box of the source (Chinese) text
+    write_sgm(
+        os.path.join(args.output_dir, 'bboxes.sgm'),
+        bbox_entries,
+        lang=SRC_LANG,
+        src_lang=SRC_LANG,
+        setid=setid,
+    )
     if failures == 0:
         print("Data processed successfully.")
     else:

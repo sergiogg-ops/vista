@@ -8,6 +8,7 @@ from PIL import Image
 
 import pytorch_lightning as pl
 import torch
+import numpy as np
 import torch.nn.functional as F
 from configargparse import ArgumentParser
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint, EarlyStopping, Callback
@@ -16,6 +17,7 @@ from torch.utils.data import DataLoader, Dataset
 from transformers import AutoModelForMultimodalLM, AutoProcessor, get_cosine_schedule_with_warmup
 from peft import LoraConfig, get_peft_model
 from sacrebleu import corpus_bleu, corpus_ter
+from PIL import Image, ImageDraw
 from dotenv import load_dotenv
 load_dotenv()  # Load environment variables from .env file, if present
 
@@ -43,6 +45,45 @@ def load_texts_json(path: str, lang: str) -> list[dict]:
         sample['idx'] = os.path.join(os.path.dirname(path), sample['idx'] + '.jpg')
     return record
 
+def _polygon_points(polygon: list, margin: int = 0) -> list[tuple[float, float]]:
+    points = np.array(polygon, dtype=np.float32)
+
+    if points.ndim == 1:
+        # Flat list like [x0, y0, x1, y1, ...] — reshape to (N, 2)
+        points = points.reshape(-1, 2)
+
+    if margin > 0:
+        center = points.mean(axis=0)
+        directions = points - center
+        norms = np.linalg.norm(directions, axis=1, keepdims=True)
+        # Avoid division by zero for points exactly at the center
+        norms = np.where(norms == 0, 1, norms)
+        points = points + (directions / norms) * margin
+
+    return [tuple(p) for p in points.tolist()]
+
+def mask_other_bounding_boxes(
+        image: Image.Image,
+        target_polygon: list,
+        other_polygons: list[list],
+        fill: tuple[int, int, int] = (0, 0, 0),
+        margin: int = 0,
+) -> Image.Image:
+    """
+    Paint every polygon in ``other_polygons`` with ``fill`` while keeping the
+    region of ``target_polygon`` untouched (even where boxes overlap).
+    """
+    masked = image.copy()
+    draw = ImageDraw.Draw(masked)
+    for polygon in other_polygons:
+        draw.polygon(_polygon_points(polygon, margin), fill=fill)
+
+    # Restore the target region in case another box overlapped it
+    target_mask = Image.new("L", image.size, 0)
+    ImageDraw.Draw(target_mask).polygon(_polygon_points(target_polygon), fill=255)
+    masked.paste(image, (0, 0), target_mask)
+
+    return masked
 
 class GemmaOCRTranslationDataset(Dataset):
     def __init__(
@@ -66,6 +107,11 @@ class GemmaOCRTranslationDataset(Dataset):
         # Pass only raw data; let the collator handle batch-level processing
         record = self.records[idx]
         image = Image.open(record["idx"]).convert("RGB")
+        image = mask_other_bounding_boxes(
+            image=image,
+            target_polygon=record["bbox"],
+            other_polygons=record["others"]
+        )
         
         return {
             "image": image,

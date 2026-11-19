@@ -222,17 +222,16 @@ def main():
         #image = mask_other_bounding_boxes(img, bbox, other_bboxes)
         # Save each sample without batch dimension
         
-        namesave = create_name(os.path.join(args.output_dir, f"{identifier}.jpg"))
+        #namesave = create_name(os.path.join(args.output_dir, f"{identifier}.jpg"))
         #image.save(namesave)
 
-        sample_id = os.path.basename(namesave).split('.')[0]
         target_txt[SRC_LANG] = source_txt
         for lang, text in target_txt.items():
-            lang_entries[lang].append({"idx": sample_id, "text": text})
+            lang_entries[lang].append({"idx": identifier, "text": text})
         metadata_entries.append({
-            "idx": sample_id,
+            "idx": identifier,
             # Path of the (masked) image
-            "image": namesave,
+            "image": os.path.join(args.output_dir, f"{identifier}.jpg"),
             # Bounding box of the source (Chinese) text, same comma-separated
             # layout as the raw metadata ("x0,y0,x1,y1,...")
             "bbox": format_bbox(bbox),

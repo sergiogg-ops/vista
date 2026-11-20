@@ -212,6 +212,7 @@ def main():
     for idx, name in tqdm(enumerate(identifiers[:num_samples]), desc="Processing batches", total=num_samples):
         identifier = os.path.splitext(name)[0]
         metadata_file = os.path.join(args.metadata_path, f"{identifier}.txt")
+        os.system(f"cp {os.path.join(args.img_path,identifier + '.jpg')} {os.path.join(args.output_dir, identifier + '.jpg')}")
         #img = load_image(os.path.join(args.img_path,identifier + '.jpg'))
         bbox, other_bboxes = get_bbox(metadata_file, src_texts[idx])
         if bbox is None:

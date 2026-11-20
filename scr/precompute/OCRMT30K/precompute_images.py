@@ -171,7 +171,7 @@ def write_json(path: str, entries: list[dict]) -> None:
 
 def format_bbox(bbox: list) -> str:
     """Comma-separated layout of the raw metadata ("x0,y0,x1,y1,...")."""
-    return ",".join(str(int(v)) if float(v).is_integer() else str(v) for v in bbox)
+    return [int(v) if float(v).is_integer() else str(v) for v in bbox]
 
 def create_name(ini_name):
     path, ext = os.path.splitext(ini_name)
@@ -212,6 +212,7 @@ def main():
     for idx, name in tqdm(enumerate(identifiers[:num_samples]), desc="Processing batches", total=num_samples):
         identifier = os.path.splitext(name)[0]
         metadata_file = os.path.join(args.metadata_path, f"{identifier}.txt")
+        os.system(f"cp {os.path.join(args.img_path,identifier + '.jpg')} {os.path.join(args.output_dir, identifier + '.jpg')}")
         #img = load_image(os.path.join(args.img_path,identifier + '.jpg'))
         bbox, other_bboxes = get_bbox(metadata_file, src_texts[idx])
         print(type(bbox), type(other_bboxes))
@@ -235,7 +236,7 @@ def main():
             "image": os.path.join(args.output_dir, f"{identifier}.jpg"),
             # Bounding box of the source (Chinese) text, same comma-separated
             # layout as the raw metadata ("x0,y0,x1,y1,...")
-            "bbox": format_bbox(bbox),
+            "bbox": bbox,
             # Bounding boxes of the other texts, masked out in the image
             "others": other_bboxes,
             "source_text": source_txt,

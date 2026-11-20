@@ -214,6 +214,7 @@ def main():
         metadata_file = os.path.join(args.metadata_path, f"{identifier}.txt")
         #img = load_image(os.path.join(args.img_path,identifier + '.jpg'))
         bbox, other_bboxes = get_bbox(metadata_file, src_texts[idx])
+        print(type(bbox), type(other_bboxes))
         if bbox is None:
             failures += 1
             continue
@@ -228,7 +229,7 @@ def main():
         target_txt[SRC_LANG] = source_txt
         for lang, text in target_txt.items():
             lang_entries[lang].append({"idx": identifier, "text": text})
-        metadata_entries.append({
+        metadata_entries += [{
             "idx": identifier,
             # Path of the (masked) image
             "image": os.path.join(args.output_dir, f"{identifier}.jpg"),
@@ -237,7 +238,11 @@ def main():
             "bbox": format_bbox(bbox),
             # Bounding boxes of the other texts, masked out in the image
             "others": other_bboxes,
-        })
+            "source_text": source_txt,
+            "target_text": text,
+            "source_lang": SRC_LANG,
+            "target_lang": lang
+        } for lang, text in target_txt.items()]
 
     for lang, entries in lang_entries.items():
         write_json(os.path.join(args.output_dir, f'texts_{lang}.json'), entries)

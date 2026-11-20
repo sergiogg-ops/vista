@@ -115,8 +115,8 @@ class QwenOCRTranslationDataset(Dataset):
         
         return {
             "image": image,
-            "lang": record['lang'],
-            "txt_tgt": record['text']
+            "lang": record['target_lang'],
+            "txt_tgt": record['target_text']
         }
     
     def _collate_fn(self, batch_samples):  

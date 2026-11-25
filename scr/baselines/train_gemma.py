@@ -92,6 +92,7 @@ class GemmaOCRTranslationDataset(Dataset):
         processor, 
         prompt: str = "Translate the {source_lang} text in this image into {target_lang}:", 
     ):
+        self.index_dir = os.path.dirname(index_files)
         with open(index_files, 'r') as file:
             self.records = json.load(file)
         self.processor = processor
@@ -103,7 +104,8 @@ class GemmaOCRTranslationDataset(Dataset):
     def __getitem__(self, idx: int) -> dict:
         # Pass only raw data; let the collator handle batch-level processing
         record = self.records[idx]
-        image = Image.open(record["idx"]).convert("RGB")
+        img_path = os.path.join(self.index_dir, record['idx'] + '.jpg')
+        image = Image.open(img_path).convert("RGB")
         image = mask_other_bounding_boxes(
             image=image,
             target_polygon=record["bbox"],
@@ -112,8 +114,8 @@ class GemmaOCRTranslationDataset(Dataset):
         
         return {
             "image": image,
-            "lang": record['lang'],
-            "txt_tgt": record['text']
+            "lang": record['target_lang'],
+            "txt_tgt": record['target_text']
         }
     
     def _collate_fn(self, batch_samples):

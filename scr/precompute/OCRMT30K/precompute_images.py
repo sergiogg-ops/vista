@@ -215,7 +215,6 @@ def main():
         os.system(f"cp {os.path.join(args.img_path,identifier + '.jpg')} {os.path.join(args.output_dir, identifier + '.jpg')}")
         #img = load_image(os.path.join(args.img_path,identifier + '.jpg'))
         bbox, other_bboxes = get_bbox(metadata_file, src_texts[idx])
-        print(type(bbox), type(other_bboxes))
         if bbox is None:
             failures += 1
             continue

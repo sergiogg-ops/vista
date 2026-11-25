@@ -31,7 +31,7 @@ CODE2LANG = {
     'ind_Latn': 'Indonesian', 
     'jpn_Jpan': 'Japanese', 
     'rus_Cyrl': 'Russian', 
-    'urd_Arab': 'Urdu'
+    'urd_Arab': 'Urdu',
 }
 
 
@@ -464,7 +464,7 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
 
     processor = AutoProcessor.from_pretrained(
-        args.model_path, trust_remote_code=args.trust_remote_code, token=args.hf_token
+        args.model_path, trust_remote_code=args.trust_remote_code, token=args.hf_token, max_pixels=1024*768
     )
 
     datamodule = QwenOCRDataModule(

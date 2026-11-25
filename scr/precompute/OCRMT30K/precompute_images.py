@@ -227,7 +227,6 @@ def main():
         #namesave = create_name(os.path.join(args.output_dir, f"{identifier}.jpg"))
         #image.save(namesave)
 
-        target_txt[SRC_LANG] = source_txt
         for lang, text in target_txt.items():
             lang_entries[lang].append({"idx": identifier, "text": text})
         metadata_entries += [{

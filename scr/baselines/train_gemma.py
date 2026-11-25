@@ -92,11 +92,8 @@ class GemmaOCRTranslationDataset(Dataset):
         processor, 
         prompt: str = "Translate the {source_lang} text in this image into {target_lang}:", 
     ):
-        targets = {os.path.basename(file).split('.')[0].removeprefix('texts_'): file for file in index_files}
-        if 'zho_Hans' in targets:
-            del targets['zho_Hans']
-        self.targets = list(targets.keys())
-        self.records = sum([load_texts_json(targets[lang], lang) for lang in self.targets],[])
+        with open(index_files, 'r') as file:
+            self.records = json.load(file)
         self.processor = processor
         self.prompt = prompt
 

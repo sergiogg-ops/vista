@@ -61,6 +61,7 @@ def main():
         'lora_alpha': 16,
     }
     model = GemmaOCRVLTranslator.load_from_checkpoint(args.resume_from_checkpoint, map_location='cpu', weights_only=False, **kwargs)
+    model.model.language_model.merge_and_unload()
 
     model.model.save_pretrained(args.output_file)
 

@@ -11,7 +11,7 @@ import os
 import cv2
 import re
 import unicodedata
-from xml.sax.saxutils import escape
+import json
 
 def load_image(path: str) -> Image.Image:
     """
@@ -162,25 +162,16 @@ def get_bbox(filename, text):
 
 SRC_LANG = "zho_Hans"
 
-def write_sgm(path: str, entries: list[dict], lang: str, src_lang: str, setid: str) -> None:
+def write_json(path: str, entries: list[dict]) -> None:
     """
-    Write ``entries`` (dicts with ``idx`` and ``text``) as a WMT/NIST-style SGML
-    file wrapped in a ``<set>`` element. All entries are segments of a single
-    ``<doc>``, and each segment's ``id`` is the entry's ``idx`` (the saved
-    image name).
+    Write ``entries`` (dicts with ``idx`` and ``text``) as a JSON list.
     """
-    q = lambda s: escape(s, {'"': "&quot;"})
-    attrs = f'setid="{q(setid)}" srclang="{q(src_lang)}"'
-    if lang != src_lang:
-        attrs += f' trglang="{q(lang)}"'
-
     with open(path, "w", encoding="utf-8") as f:
-        f.write(f"<set {attrs}>\n")
-        f.write(f'<doc docid="{q(setid)}" origlang="{q(src_lang)}">\n')
-        for entry in entries:
-            f.write(f'<seg id="{q(entry["idx"])}">{escape(entry["text"])}</seg>\n')
-        f.write("</doc>\n")
-        f.write("</set>\n")
+        json.dump(entries, f, ensure_ascii=False, indent=2)
+
+def format_bbox(bbox: list) -> str:
+    """Comma-separated layout of the raw metadata ("x0,y0,x1,y1,...")."""
+    return [int(v) if float(v).is_integer() else str(v) for v in bbox]
 
 def create_name(ini_name):
     path, ext = os.path.splitext(ini_name)
@@ -215,62 +206,46 @@ def main():
 
     num_samples = min(args.num_samples, len(identifiers)) if args.num_samples > 0 else len(identifiers)
     lang_entries = {lang: [] for lang in args.target_langs + [SRC_LANG]}
-    image_entries = []
-    bbox_entries = []
+    metadata_entries = []
 
     failures = 0
     for idx, name in tqdm(enumerate(identifiers[:num_samples]), desc="Processing batches", total=num_samples):
         identifier = os.path.splitext(name)[0]
         metadata_file = os.path.join(args.metadata_path, f"{identifier}.txt")
-        img = load_image(os.path.join(args.img_path,identifier + '.jpg'))
+        os.system(f"cp {os.path.join(args.img_path,identifier + '.jpg')} {os.path.join(args.output_dir, identifier + '.jpg')}")
+        #img = load_image(os.path.join(args.img_path,identifier + '.jpg'))
         bbox, other_bboxes = get_bbox(metadata_file, src_texts[idx])
         if bbox is None:
             failures += 1
             continue
         source_txt = src_texts[idx].strip()
         target_txt = {lang: texts[idx].strip() for lang, texts in zip(args.target_langs, tgt_texts)} if tgt_texts else None
-        image = mask_other_bounding_boxes(img, bbox, other_bboxes)
+        #image = mask_other_bounding_boxes(img, bbox, other_bboxes)
         # Save each sample without batch dimension
         
-        namesave = create_name(os.path.join(args.output_dir, f"{identifier}.jpg"))
-        image.save(namesave)
+        #namesave = create_name(os.path.join(args.output_dir, f"{identifier}.jpg"))
+        #image.save(namesave)
 
-        sample_id = os.path.basename(namesave).split('.')[0]
-        target_txt[SRC_LANG] = source_txt
         for lang, text in target_txt.items():
-            lang_entries[lang].append({"idx": sample_id, "text": text})
-        image_entries.append({"idx": sample_id, "text": namesave})
-        # Same comma-separated layout as the raw metadata ("x0,y0,x1,y1,...")
-        bbox_entries.append({
-            "idx": sample_id,
-            "text": ",".join(str(int(v)) if float(v).is_integer() else str(v) for v in bbox),
-        })
+            lang_entries[lang].append({"idx": identifier, "text": text})
+        metadata_entries += [{
+            "idx": identifier,
+            # Path of the (masked) image
+            "image": os.path.join(args.output_dir, f"{identifier}.jpg"),
+            # Bounding box of the source (Chinese) text, same comma-separated
+            # layout as the raw metadata ("x0,y0,x1,y1,...")
+            "bbox": bbox,
+            # Bounding boxes of the other texts, masked out in the image
+            "others": other_bboxes,
+            "source_text": source_txt,
+            "target_text": text,
+            "source_lang": SRC_LANG,
+            "target_lang": lang
+        } for lang, text in target_txt.items()]
 
-    setid = os.path.basename(os.path.normpath(args.output_dir))
     for lang, entries in lang_entries.items():
-        write_sgm(
-            os.path.join(args.output_dir, f'texts_{lang}.sgm'),
-            entries,
-            lang=lang,
-            src_lang=SRC_LANG,
-            setid=setid,
-        )
-    # Mapping from segment id to the path of its (masked) image
-    write_sgm(
-        os.path.join(args.output_dir, 'images.sgm'),
-        image_entries,
-        lang=SRC_LANG,
-        src_lang=SRC_LANG,
-        setid=setid,
-    )
-    # Mapping from segment id to the bounding box of the source (Chinese) text
-    write_sgm(
-        os.path.join(args.output_dir, 'bboxes.sgm'),
-        bbox_entries,
-        lang=SRC_LANG,
-        src_lang=SRC_LANG,
-        setid=setid,
-    )
+        write_json(os.path.join(args.output_dir, f'texts_{lang}.json'), entries)
+    write_json(os.path.join(args.output_dir, 'metadata.json'), metadata_entries)
     if failures == 0:
         print("Data processed successfully.")
     else:

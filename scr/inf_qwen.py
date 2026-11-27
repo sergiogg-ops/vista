@@ -8,7 +8,7 @@ import torch
 import torch.nn.functional as F
 from configargparse import ArgumentParser
 from transformers import AutoProcessor
-from scr.baselines.train_qwen import QwenOCRVLTranslator, CODE2LANG
+from baselines.train_qwen import QwenOCRVLTranslator, CODE2LANG
 from dotenv import load_dotenv
 load_dotenv()  # Load environment variables from .env file, if present
 
@@ -163,7 +163,7 @@ def main():
         'lora_alpha': 16,
     }
     if args.resume_from_checkpoint:
-        model = QwenOCRVLTranslator.load_from_checkpoint(args.checkpoint, map_location='cpu', weights_only=False, **kwargs)
+        model = QwenOCRVLTranslator.load_from_checkpoint(args.resume_from_checkpoint, map_location='cpu', weights_only=False, **kwargs)
         model = model.to('cuda')
     else:
         model = QwenOCRVLTranslator(**kwargs)

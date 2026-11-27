@@ -826,7 +826,7 @@ class Translator(pl.LightningModule):
             batch['pixel_values'],
             batch['image_grid_thw'],
             batch['cu_seqlens'],
-            batch['tgt_langs']
+            batch['tgt_langs'],
         )
 
         hyp_batch = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)

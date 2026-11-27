@@ -7,13 +7,16 @@ from safetensors.torch import load_file
 import numpy as np
 import pytorch_lightning as pl
 import torch
+from torch.nn.utils.rnn import pad_sequence
 from transformers import (
     AutoModelForSeq2SeqLM, 
     NllbTokenizer, 
-    AutoModelForImageTextToText)
+    AutoModelForImageTextToText,
+    AutoProcessor)
 from peft import LoraConfig, get_peft_model
-import vista as mt
+import vista_qwen as mt
 from dotenv import load_dotenv
+from PIL import Image
 
 load_dotenv()
 HF_TOKEN = os.getenv("HF_TOKEN")
@@ -22,60 +25,79 @@ torch.cuda.set_device(0)
 _ = torch.zeros(1).cuda()
 
 class MTDataset(torch.utils.data.Dataset):
-    def __init__(self, data_dir, padding_value, target='eng_Latn'):
+    def __init__(self, index_file, processor, tokenizer, target, padding_value):
+        self.processor = processor
+        self.tokenizer = tokenizer
+        self.target = target
         self.padding_value = padding_value
-        self.samples = [os.path.join(data_dir, f) for f in os.listdir(data_dir)]
-        self.samples = [f for f in self.samples if os.path.isdir(f)]
-        self.tgt_lang = target
-    
+
+        self.records = []
+        source_records_by_dir = {}
+        path = mt.resolve_index_files(index_file)[0]
+        directory = os.path.dirname(path)
+        if directory not in source_records_by_dir:
+            source_path = os.path.join(directory, "texts_zho_Hans.json")
+            if not os.path.isfile(source_path):
+                raise FileNotFoundError(f"Missing source text index: {source_path}")
+            source_records_by_dir[directory] = {
+                record["image_path"]: record["text"]
+                for record in mt.load_texts_json(source_path, "zho_Hans")
+            }
+
+        source_records = source_records_by_dir[directory]
+        for record in mt.load_texts_json(path, target):
+            source_text = source_records.get(record["image_path"])
+            if source_text is None:
+                raise ValueError(
+                    f"No source transcription found for {record['image_path']}"
+                )
+            self.records.append({**record, "src_txt": source_text})
+
     def __len__(self):
-        return len(self.samples)
-    
+        return len(self.records)
+
     def __getitem__(self, idx):
-        sample_path = self.samples[idx % len(self.samples)]
-        img_path = os.path.join(sample_path, "image.safetensors")
-        image = load_file(img_path)
-        #eos_marks = torch.zeros(sample['tgt_txt_lat'].shape[0]+1, dtype=torch.float32)
-        #eos_marks[-1] = 1.0
+        record = self.records[idx]
+        with Image.open(record["image_path"]) as image:
+            image = image.convert("RGB")
 
         return {
-            'pixel_values': image['pixel_values'],
-            'image_grid_thw': image['image_grid_thw'],
-            'tgt_lang': self.tgt_lang,
-            'name': os.path.basename(sample_path)
+            "image": image,
+            "lang": record["lang"],
+            "src_txt": record["src_txt"],
+            "name": os.path.basename(record["image_path"]),
         }
 
     def collate_fn(self, batch):
-        pixel_values_list = []
-        grid_thw_list = []
+        images = [sample["image"] for sample in batch]
+        vision_inputs = self.processor(images=images, return_tensors="pt")
+        pixel_values = vision_inputs["pixel_values"]
+        grid_thw = vision_inputs["image_grid_thw"].reshape(-1, 3)
 
-        for b in batch:
-            p_val = b['pixel_values'].squeeze() if b['pixel_values'].ndim > 4 else b['pixel_values']
-            if p_val.ndim == 3:
-                p_val = p_val.unsqueeze(0)
-            pixel_values_list.append(p_val)
+        patches_per_image = grid_thw.prod(dim=1)
+        if int(patches_per_image.sum()) != pixel_values.shape[0]:
+            raise ValueError(
+                "Image processor returned pixel values whose patch count does not "
+                "match image_grid_thw"
+            )
+        pixel_attention_mask = (
+            torch.arange(patches_per_image.max(), device=pixel_values.device).unsqueeze(0)
+            < patches_per_image.to(pixel_values.device).unsqueeze(1)
+        )
 
-            g_thw = b['image_grid_thw'].squeeze()
-            grid_thw_list.append(g_thw)
-
-        grid_thw = torch.stack(grid_thw_list, dim=0)
-
-        # Concatenate all images' patches into one sequence, then add the
-        # required dummy batch dim of size 1 (model only supports batch_size==1
-        # and instead uses grid_thw to slice per-image patches out of this
-        # single flattened sequence — see PaddleOCRVisionEmbeddings.forward).
-        pixel_values = torch.cat(pixel_values_list, dim=0).unsqueeze(0)  # [1, total_patches, C, ph, pw]
-
-        patches_per_image = grid_thw[:, 0] * grid_thw[:, 1] * grid_thw[:, 2]
-        cu_seqlens = torch.zeros(patches_per_image.shape[0] + 1, dtype=torch.int32)
-        cu_seqlens[1:] = torch.cumsum(patches_per_image, dim=0)
+        src_txt = self.tokenizer(
+            [sample["src_txt"] for sample in batch],
+            return_tensors="pt",
+            padding=True,
+        ).input_ids
 
         return {
-            'pixel_values': pixel_values,      # [1, total_patches, C, ph, pw]
-            'image_grid_thw': grid_thw,        # [B, 3]
-            'cu_seqlens': cu_seqlens,
-            'tgt_langs': [b['tgt_lang'] for b in batch],
-            'name': [b['name'] for b in batch],
+            "pixel_values": pixel_values,
+            "pixel_attention_mask": pixel_attention_mask,
+            "image_grid_thw": grid_thw,
+            "src_txt": src_txt,
+            "tgt_langs": [sample["lang"] for sample in batch],
+            "name": [sample["name"] for sample in batch],
         }
 
 def parse_args():
@@ -130,14 +152,15 @@ def main():
                                                         use_safetensors=True,
                                                         **kwargs)
     vision_model = AutoModelForImageTextToText.from_pretrained(args.vision_model, 
-                                                  token=HF_TOKEN, 
-                                                  use_safetensors=True).model.visual.vision_model
+                                                      token=HF_TOKEN, 
+                                                      use_safetensors=True).model.visual
+    processor = AutoProcessor.from_pretrained(args.vision_model, token=HF_TOKEN)
     if args.use_lora:
             lora_config = LoraConfig(
                 r=args.lora_r,
                 lora_alpha=args.lora_alpha,
                 lora_dropout=args.lora_dropout,
-                target_modules=["k_proj", "q_proj", "v_proj", "out_proj", "fc1", "fc2"]
+                target_modules=["qkv", "proj", "linear_fc1", "linear_fc2"]
             )
             vision_model = get_peft_model(vision_model, lora_config)
     # Language tokens
@@ -178,7 +201,7 @@ def main():
         benchmark=False,
     )
 
-    dataset = MTDataset(args.latents_dir, padding_tok, target=args.tgt_lang)
+    dataset = MTDataset(args.latents_dir, processor = processor, tokenizer = tokenizer, padding_value = padding_tok, target=args.tgt_lang)
     dataloader = torch.utils.data.DataLoader(
         dataset=dataset,
         batch_size=args.batch_size,
